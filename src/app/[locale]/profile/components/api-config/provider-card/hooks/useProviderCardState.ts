@@ -10,6 +10,7 @@ import {
   matchesModelKey,
 } from '../../types'
 import type {
+  ImageApiMode,
   ModelFormState,
   ProviderCardGroupedModels,
   ProviderCardModelType,
@@ -19,6 +20,7 @@ import type {
 import { VERIFIABLE_PROVIDER_KEYS } from '../types'
 import type { CustomModel } from '../../types'
 import { apiFetch } from '@/lib/api-fetch'
+import type { OpenAICompatMediaTemplate } from '@/lib/openai-compat-media-template'
 import {
   useAssistantChat,
   type AssistantDraftModel,
@@ -54,6 +56,7 @@ interface UseProviderCardStateParams {
 const EMPTY_MODEL_FORM: ModelFormState = {
   name: '',
   modelId: '',
+  imageApiMode: 'sync',
   enableCustomPricing: false,
   priceInput: '',
   priceOutput: '',
@@ -153,6 +156,101 @@ export async function probeModelLlmProtocolViaApi(params: {
   return {
     llmProtocol: payload.protocol,
     llmProtocolCheckedAt: checkedAt,
+  }
+}
+
+export function buildOpenAICompatImageTemplate(mode: ImageApiMode): OpenAICompatMediaTemplate {
+  if (mode === 'async') {
+    return {
+      version: 1,
+      mediaType: 'image',
+      mode: 'async',
+      create: {
+        method: 'POST',
+        path: '/images/generations/async',
+        contentType: 'application/json',
+        bodyTemplate: {
+          model: '{{model}}',
+          prompt: '{{prompt}}',
+          size: '{{size}}',
+          n: 1,
+          response_format: 'url',
+        },
+      },
+      status: {
+        method: 'GET',
+        path: '/images/tasks/{{task_id}}',
+      },
+      response: {
+        taskIdPath: '$.task_id',
+        statusPath: '$.status',
+        outputUrlPath: '$.assets[0].downloadUrl',
+        errorPath: '$.errorMessage',
+      },
+      polling: {
+        intervalMs: 3000,
+        timeoutMs: 600000,
+        doneStates: ['completed', 'succeeded'],
+        failStates: ['failed', 'error', 'cancelled'],
+      },
+    }
+  }
+
+  return {
+    version: 1,
+    mediaType: 'image',
+    mode: 'sync',
+    create: {
+      method: 'POST',
+      path: '/images/generations',
+      contentType: 'application/json',
+      bodyTemplate: {
+        model: '{{model}}',
+        prompt: '{{prompt}}',
+      },
+    },
+    response: {
+      outputUrlPath: '$.data[0].url',
+      outputUrlsPath: '$.data',
+      errorPath: '$.error.message',
+    },
+  }
+}
+
+export function resolveImageApiModeFromModel(model: CustomModel): ImageApiMode {
+  if (getProviderKey(model.provider) !== 'openai-compatible' || model.type !== 'image') {
+    return 'sync'
+  }
+  if (model.compatMediaTemplate?.mediaType === 'image' && model.compatMediaTemplate.mode === 'async') {
+    return 'async'
+  }
+  return 'sync'
+}
+
+type OpenAICompatImageTemplatePatch = Pick<
+  CustomModel,
+  'compatMediaTemplate' | 'compatMediaTemplateCheckedAt' | 'compatMediaTemplateSource'
+>
+
+export function buildOpenAICompatImageTemplatePatch(params: {
+  providerId: string
+  modelType: CustomModel['type'] | ProviderCardModelType
+  imageApiMode?: ImageApiMode
+  currentModel?: CustomModel
+}): OpenAICompatImageTemplatePatch | null {
+  if (getProviderKey(params.providerId) !== 'openai-compatible' || params.modelType !== 'image') {
+    return null
+  }
+
+  const nextMode = params.imageApiMode ?? 'sync'
+  if (params.currentModel && resolveImageApiModeFromModel(params.currentModel) === nextMode) {
+    return null
+  }
+
+  return {
+    compatMediaTemplate: buildOpenAICompatImageTemplate(nextMode),
+    compatMediaTemplateCheckedAt: new Date().toISOString(),
+    compatMediaTemplateSource: 'manual',
   }
 }
 
@@ -551,6 +649,7 @@ export function useProviderCardState({
     setEditModel({
       name: model.name,
       modelId: model.modelId,
+      imageApiMode: resolveImageApiModeFromModel(model),
     })
   }
 
@@ -602,6 +701,14 @@ export function useProviderCardState({
     try {
       const originalModel = all.find((model) => model.modelKey === originalModelKey)
       let protocolUpdates: Pick<CustomModel, 'llmProtocol' | 'llmProtocolCheckedAt'> | null = null
+      const imageTemplatePatch = originalModel
+        ? buildOpenAICompatImageTemplatePatch({
+          providerId: provider.id,
+          modelType: originalModel.type,
+          imageApiMode: editModel.imageApiMode,
+          currentModel: originalModel,
+        })
+        : null
       if (originalModel && shouldReprobeModelLlmProtocol({
         providerId: provider.id,
         originalModel,
@@ -624,6 +731,7 @@ export function useProviderCardState({
       onUpdateModel?.(originalModelKey, {
         name: editModel.name,
         modelId: editModel.modelId,
+        ...(imageTemplatePatch ? imageTemplatePatch : {}),
         ...(protocolUpdates ? protocolUpdates : {}),
       })
 
@@ -660,6 +768,11 @@ export function useProviderCardState({
     setIsModelSavePending(true)
     try {
       let protocolFields: Pick<CustomModel, 'llmProtocol' | 'llmProtocolCheckedAt'> | null = null
+      const imageTemplatePatch = buildOpenAICompatImageTemplatePatch({
+        providerId: provider.id,
+        modelType: type,
+        imageApiMode: newModel.imageApiMode,
+      })
       if (shouldProbeModelLlmProtocol({ providerId: provider.id, modelType: type })) {
         const flushed = await flushConfigBeforeProbe()
         if (!flushed) return
@@ -682,6 +795,7 @@ export function useProviderCardState({
         type,
         provider: provider.id,
         price: 0,
+        ...(imageTemplatePatch ? imageTemplatePatch : {}),
         ...(protocolFields ? protocolFields : {}),
       })
 

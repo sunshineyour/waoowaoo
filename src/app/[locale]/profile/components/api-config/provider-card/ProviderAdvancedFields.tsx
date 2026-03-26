@@ -6,6 +6,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { getProviderKey, isPresetComingSoonModel, type CustomModel } from '../types'
 import type { UseProviderCardStateResult } from './hooks/useProviderCardState'
 import type {
+  ImageApiMode,
   ProviderCardModelType,
   ProviderCardProps,
   ProviderCardTranslator,
@@ -75,6 +76,13 @@ export function shouldShowOpenAICompatVideoHint(
   return getProviderKey(providerId) === 'openai-compatible' && type === 'video'
 }
 
+export function shouldShowOpenAICompatImageMode(
+  providerId: string,
+  type: ProviderCardModelType | CustomModel['type'] | null | undefined,
+): boolean {
+  return getProviderKey(providerId) === 'openai-compatible' && type === 'image'
+}
+
 function shouldShowDefaultTabs(providerId: string): boolean {
   const providerKey = getProviderKey(providerId)
   return providerKey === 'openai-compatible' || providerKey === 'gemini-compatible'
@@ -123,6 +131,38 @@ function getModelPriceTexts(model: CustomModel, t: ProviderCardTranslator): stri
     return [`¥${formatPriceAmount(model.price)}`]
   }
   return []
+}
+
+function OpenAICompatImageModeField({
+  value,
+  onChange,
+  t,
+}: {
+  value?: ImageApiMode
+  onChange: (value: ImageApiMode) => void
+  t: ProviderCardTranslator
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium text-[var(--glass-text-secondary)]">
+          {t('imageApiMode')}
+        </span>
+        <span className="text-[11px] text-[var(--glass-text-tertiary)]">
+          {t('imageApiModeHint')}
+        </span>
+      </div>
+      <SegmentedControl
+        layout="compact"
+        value={value ?? 'sync'}
+        onChange={(next) => onChange(next as ImageApiMode)}
+        options={[
+          { value: 'sync', label: t('imageApiModeSync') },
+          { value: 'async', label: t('imageApiModeAsync') },
+        ]}
+      />
+    </div>
+  )
 }
 
 export function ProviderAdvancedFields({
@@ -236,6 +276,17 @@ export function ProviderAdvancedFields({
               {state.isModelSavePending ? t('saving') : t('save')}
             </button>
           </div>
+          {shouldShowOpenAICompatImageMode(provider.id, currentType) && (
+            <div className="mt-2.5">
+              <OpenAICompatImageModeField
+                value={state.newModel.imageApiMode}
+                onChange={(imageApiMode) =>
+                  state.setNewModel({ ...state.newModel, imageApiMode })
+                }
+                t={t}
+              />
+            </div>
+          )}
           {shouldShowVideoHint && (
             <p className="mt-2 text-xs text-[var(--glass-text-tertiary)]">
               {t('openaiCompatVideoOnlyHint')}
@@ -332,6 +383,17 @@ export function ProviderAdvancedFields({
               {state.isModelSavePending ? t('saving') : t('save')}
             </button>
           </div>
+          {shouldShowOpenAICompatImageMode(provider.id, state.showAddForm) && (
+            <div className="mt-2.5">
+              <OpenAICompatImageModeField
+                value={state.newModel.imageApiMode}
+                onChange={(imageApiMode) =>
+                  state.setNewModel({ ...state.newModel, imageApiMode })
+                }
+                t={t}
+              />
+            </div>
+          )}
           {shouldShowOpenAICompatVideoHint(provider.id, state.showAddForm) && (
             <p className="mt-2 text-xs text-[var(--glass-text-tertiary)]">
               {t('openaiCompatVideoOnlyHint')}
@@ -392,6 +454,15 @@ function ModelRow({
               className="glass-input-base w-full px-3 py-1.5 text-[12px] font-mono"
               placeholder={t('modelActualId')}
             />
+            {shouldShowOpenAICompatImageMode(model.provider, model.type) && (
+              <OpenAICompatImageModeField
+                value={state.editModel.imageApiMode}
+                onChange={(imageApiMode) =>
+                  state.setEditModel({ ...state.editModel, imageApiMode })
+                }
+                t={t}
+              />
+            )}
             {hasPriceText && (
               <div className="text-xs text-[var(--glass-text-tertiary)]">{priceText}</div>
             )}

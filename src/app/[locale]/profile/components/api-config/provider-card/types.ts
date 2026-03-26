@@ -35,12 +35,15 @@ export interface ProviderCardProps {
 export interface ModelFormState {
   name: string
   modelId: string
+  imageApiMode?: ImageApiMode
   enableCustomPricing?: boolean
   priceInput?: string
   priceOutput?: string
   basePrice?: string
   optionPricesJson?: string
 }
+
+export type ImageApiMode = 'sync' | 'async'
 
 export type ProviderCardModelType = 'llm' | 'image' | 'video' | 'audio'
 
