@@ -29,8 +29,6 @@ export default function ProfilePage() {
     )
   }
 
-  const noBillingText = t('openSourceNoBilling')
-
   return (
     <div className="glass-page min-h-screen">
       <Navbar />
@@ -52,7 +50,6 @@ export default function ProfilePage() {
                 {/* 余额卡片 */}
                 <div className="glass-surface-soft rounded-2xl border border-[var(--glass-stroke-base)] p-4">
                   <div className="text-xs font-medium text-[var(--glass-text-secondary)]">{t('availableBalance')}</div>
-                  <div className="mt-2 text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</div>
                 </div>
               </div>
 
@@ -100,7 +97,6 @@ export default function ProfilePage() {
               ) : (
                 <div className="flex h-full flex-col items-center justify-center px-6 text-center">
                   <AppIcon name="receipt" className="mb-4 h-12 w-12 text-[var(--glass-text-tertiary)]" />
-                  <p className="text-base font-semibold text-[var(--glass-text-primary)]">{noBillingText}</p>
                 </div>
               )}
             </div>
